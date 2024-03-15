@@ -1,4 +1,5 @@
 #include "server_client.h"
+#include "parser.h"
 
 /**
  * A function that prints an error message along with the corresponding error number to the standard error stream.
@@ -112,7 +113,14 @@ void accept_connection(int server_sock){
             continue;
         }
 
-        do_something(client_sock);
+        // do_something(client_sock);
+
+        while(true){
+            int32_t err = one_request(client_sock);
+            if(err){
+                break;
+            }
+        }
         close(client_sock);
     }
 }
