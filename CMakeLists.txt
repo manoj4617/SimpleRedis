@@ -1,20 +1,14 @@
 cmake_minimum_required(VERSION 3.10)
-
 project(redis)
 
 # Compiler Flags
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -g -fpermissive") 
 add_compile_options(-fPIC)  
 
-# Compiliing as shared lib
-add_library(server SHARED server.cpp)
-add_library(client SHARED client.cpp)
-add_library(parser SHARED parser.cpp)
+# Locate GoogleTest
+find_package(GTest REQUIRED)
+include_directories(${GTEST_INCLUDE_DIRS})
 
-# Executables
-add_executable(main_server main_server.cpp)
-add_executable(main_client main_client.cpp)
-
-# Linking
-target_link_libraries(main_server server parser)
-target_link_libraries(main_client client parser)
+# Process subdirectories for source and tests
+add_subdirectory(src)
+add_subdirectory(test)
