@@ -78,7 +78,7 @@ int32_t read_res(int fd) {
     err = read_full(fd, &rbuf[4], len);
     if (err) {
         msg("read() error");
-        return err;
+        return -1;
     }
 
     uint32_t rescode = 0;

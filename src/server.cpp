@@ -203,7 +203,7 @@ static uint32_t do_get(const std::vector<std::string> &cmd, uint8_t *res, uint32
         memcpy(res, val.data(), val.size());
 
         // Update the length of the buffer with the length of the value
-        *reslen = (uint32_t)val.data();
+        *reslen = (uint32_t)val.size();
 
         // Return RES_OK to indicate success
         return RES_OK;
@@ -390,7 +390,7 @@ static bool try_one_request(Conn *conn){
 
     wlen += 4;
     // generate echoing response
-    memcpy(&conn->wbuf[0], &len, 4);
+    memcpy(&conn->wbuf[0], &wlen, 4);
     memcpy(&conn->wbuf[4], &rescode, 4);
     conn->wbuf_size = 4 + wlen;
 
