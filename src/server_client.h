@@ -11,6 +11,8 @@
 #include <vector>
 #include <poll.h>
 #include <fcntl.h>
+#include <map>
+#include <string>
 
 
 const size_t k_max_msg = 4096;
@@ -19,6 +21,12 @@ enum {
     STATE_REQ = 0,
     STATE_RES = 1,
     STATE_END = 2,      // Mark the connection for deletion
+};
+
+enum {
+    RES_OK = 0,
+    RES_ERR = 1,
+    RES_NX = 2,
 };
 
 struct Conn {
@@ -40,7 +48,7 @@ void listen_socket(int socket);
 void accept_connection(int socket);
 int connect(int socket, uint32_t ip, uint16_t port);
 
-int32_t send_req(int fd, const char *text);
+int32_t send_req(int fd, std::vector<std::string> &cmd);
 int32_t read_res(int fd);
 
 void die(const char *message);

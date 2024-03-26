@@ -97,7 +97,237 @@ void listen_socket(int server_sock){
     }
 }
 
+/*
+ * Function: parse_req
+ * 
+ * This function takes a pointer to a byte array, the length of the array, and a reference to a vector of strings.
+ * 
+ * The purpose of this function is to parse a request that follows a specific format. The format is:
+ * 
+ * | 4-byte little-endian integer representing the number of strings | sequence of strings 
+ * (each preceded by a 4-byte integer representing the length of the string)
+ * 
+ * The function will return 0 if the parsing is successful, and -1 if there is an error.
+ * 
+ * The function will also populate the vector of strings with the parsed strings.
+ */
 
+static int32_t parse_req(const uint8_t *data, 
+                            size_t len,
+                            std::vector<std::string> &out){
+
+    // Check if the length of the data is at least 4 bytes. If not, return -1.
+    if(len < 4){
+        return -1;
+    }
+
+    // Get the number of strings from the first 4 bytes of the data
+    uint32_t n = 0;
+    memcpy(&n, &data[0], 4);
+
+    // Check if the number of strings is less than or equal to k_max_msg. If not, return -1.
+    if(n > k_max_msg){
+        return -1;
+    }
+
+    // Initialize the position to 4, since the first 4 bytes were used to get the number of strings
+    size_t pos = 4;
+
+    // Loop n times, parsing each string
+    while(n--){
+        // Check if there is enough data to read the length of the string
+        if(pos + 4 > len){
+            return -1;
+        }
+
+        // Get the length of the string
+        uint32_t sz = 0;
+        memcpy(&sz, &data[pos], 4);
+
+        // Check if there is enough data to read the string
+        if(pos + 4 + sz > len){
+            return -1;
+        }
+
+        // Copy the string into a new std::string object and add it to the vector of strings
+        out.push_back(std::string((char*)&data[pos+4], sz));
+
+        // Update the position to the start of the next string
+        pos += 4 + sz;
+    }
+
+    // Check if the parsing was successful and all data was used. If not, return -1.
+    if(pos != len){
+        return -1;
+    }
+
+    // Return 0 to indicate success
+    return 0;
+}
+static std::map<std::string, std::string> g_map;
+
+/*
+ * Function: do_get
+ * 
+ * This function is called when the server receives a "GET" command.
+ * It retrieves the value associated with the given key from a global map.
+ * If the key is not found in the map, it returns RES_NX, indicating that
+ * the key does not exist. Otherwise, it copies the value into the provided
+ * buffer and returns RES_OK.
+ * 
+ * Parameters:
+ * - `cmd`: a vector of strings, where the first element is the command ("GET")
+ *          and the second element is the key to retrieve.
+ * - `res`: a pointer to a buffer where the value will be copied.
+ * - `reslen`: a pointer to the length of the buffer. This function will update
+ *            this value with the length of the value.
+ * 
+ * Returns:
+ * - `RES_NX` if the key is not found in the map.
+ * - `RES_OK` if the value is found and copied into the buffer.
+ */
+static uint32_t do_get(const std::vector<std::string> &cmd, uint8_t *res, uint32_t *reslen){
+        // Check if the key exists in the map
+        if(!g_map.count(cmd[1])){
+            // If the key is not found, return RES_NX
+            return RES_NX;
+        }
+
+        // Retrieve the value associated with the key
+        std::string &val = g_map[cmd[1]];
+
+        // Assert that the value is not longer than the maximum allowed message size
+        assert(val.size() <= k_max_msg);
+
+        // Copy the value into the provided buffer
+        memcpy(res, val.data(), val.size());
+
+        // Update the length of the buffer with the length of the value
+        *reslen = (uint32_t)val.data();
+
+        // Return RES_OK to indicate success
+        return RES_OK;
+}
+
+/*
+ * This function is called when the server receives a "SET" command.
+ * It sets the value associated with the given key in a global map.
+ * The parameters are as follows:
+ * - `cmd`: a vector of strings, where the first element is the command ("SET")
+ *          and the second element is the key, and the third element is the value.
+ * - `res`: a pointer to a buffer, which is not used in this function.
+ * - `reslen`: a pointer to an integer, which is also not used in this function.
+ * 
+ * This function does not return anything, but instead updates the global map.
+ *
+ * The function updates the global map by associating the value of `cmd[2]` 
+ * (the third element of `cmd`) with the key `cmd[1]` (the second element of `cmd`).
+ *
+ * The function does not perform any error checking, so it is assumed that the
+ * caller has properly formatted the `cmd` parameter.
+ */
+static uint32_t do_set(const std::vector<std::string> &cmd, uint8_t *res, uint32_t *reslen){
+        (void)res; // We don't use `res`, so we cast it to void to indicate this.
+        (void)reslen; // We also don't use `reslen`, so we cast it to void to indicate this.
+        
+        // Associate the value of `cmd[2]` with the key `cmd[1]` in the global map.
+        g_map[cmd[1]] = cmd[2];
+        
+        // Return RES_OK to indicate success.
+        return RES_OK;
+}
+
+
+/*
+ * This function is called when the server receives a "DEL" command.
+ * It deletes the key-value pair associated with the given key from the global map.
+ * The parameters are as follows:
+ * - `cmd`: a vector of strings, where the first element is the command ("DEL")
+ *          and the second element is the key.
+ * - `res`: a pointer to a buffer, which is not used in this function.
+ * - `reslen`: a pointer to an integer, which is also not used in this function.
+ * 
+ * This function does not return anything, but instead updates the global map.
+ *
+ * The function updates the global map by erasing the key-value pair from the map,
+ * where the key is the second element of the `cmd` vector.
+ *
+ * The function does not perform any error checking, so it is assumed that the
+ * caller has properly formatted the `cmd` parameter.
+ */
+static uint32_t do_del(const std::vector<std::string> &cmd, uint8_t *res, uint32_t *reslen){
+        // We don't use `res` or `reslen`, so we cast them to void to indicate this.
+        (void)res;
+        (void)reslen;
+        
+        // Erase the key-value pair from the global map, where the key is the second element of `cmd`.
+        g_map.erase(cmd[1]);
+        
+        // Return RES_OK to indicate success.
+        return RES_OK;
+}
+
+static int32_t cmd_is(const std::string &word, const char *cmd){
+    return 0 == strcasecmp(word.c_str(), cmd);
+}
+
+
+/**
+ * This function processes a single request received from a client.
+ *
+ * @param req The buffer containing the received request.
+ * @param reqlen The length of the request buffer.
+ * @param rescode Pointer to store the result code of the request.
+ * @param res Pointer to store the response buffer.
+ * @param reslen Pointer to store the length of the response buffer.
+ *
+ * @return Returns 0 on success, -1 on error.
+ *
+ * Steps involved in processing a request:
+ * 1. Parse the request buffer into a vector of strings, where each string
+ *    represents a command or a parameter.
+ * 2. Check if the parsed request has a valid format based on the number
+ *    of elements in the vector and the commands.
+ * 3. If the request is valid, dispatch the request to the appropriate
+ *    handler function (do_get, do_set, do_del) based on the command.
+ * 4. The appropriate handler function performs the operation and stores the
+ *    result in the response buffer.
+ * 5. If the request is not valid, set the result code to RES_ERR and
+ *    store the error message in the response buffer.
+ */
+static int32_t do_request(const uint8_t *req, uint32_t reqlen,
+                            uint32_t *rescode, uint8_t *res,
+                            uint32_t *reslen){
+    
+    // Parse the request buffer into a vector of strings
+    std::vector<std::string> cmd;
+    if(0 != parse_req(req, reqlen, cmd)){
+        // If parsing fails, log a message and return an error
+        msg("bad req");
+        return -1;
+    }
+
+    // Check if the parsed request has a valid format
+    if(cmd.size() == 2 && cmd_is(cmd[0], "get")){
+        // Dispatch the request to the appropriate handler function
+        *rescode = do_get(cmd, res, reslen);
+    } else if(cmd.size() == 3 && cmd_is(cmd[0], "set")){
+        *rescode = do_set(cmd, res, reslen);
+    } else if(cmd.size() == 2 && cmd_is(cmd[0], "del")){
+        *rescode = do_del(cmd, res, reslen);
+    } else {
+        // If the request format is invalid, set the result code to RES_ERR
+        // and store an error message in the response buffer
+        *rescode = RES_ERR;
+        const char *msg = "Unknown command";
+        strcpy((char*)res, msg);
+        *reslen = strlen(msg);
+        return 0;
+    }
+
+    // Return 0 to indicate success
+    return 0;
+}
 
 /**
  * Tries to parse and process a single request from the connection buffer.
@@ -147,12 +377,22 @@ static bool try_one_request(Conn *conn){
     }
 
     // got one request
-    printf("Client says: %.*s\n", len, &conn->rbuf[4]);
+    // printf("Client says: %.*s\n", len, &conn->rbuf[4]);
 
+    uint32_t rescode = 0;
+    uint32_t wlen = 0;
+    uint32_t err = do_request(&conn->rbuf[4], len, &rescode, &conn->wbuf[4 + 4], &wlen);
+
+    if(err){
+        conn->state = STATE_END;
+        return false;
+    }
+
+    wlen += 4;
     // generate echoing response
     memcpy(&conn->wbuf[0], &len, 4);
-    memcpy(&conn->wbuf[4], &conn->rbuf[4], len);
-    conn->wbuf_size = 4 + len;
+    memcpy(&conn->wbuf[4], &rescode, 4);
+    conn->wbuf_size = 4 + wlen;
 
     // remove the request from the buffer
     size_t remain = conn->rbuf_size - 4 - len;

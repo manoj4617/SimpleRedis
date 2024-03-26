@@ -1,27 +1,22 @@
 #include "server_client.h"
 #include "parser.h"
-int main(){
+int main(int argc, char **argv){
     int client_fd = create_client_socket();
 
     int rv = connect(client_fd, INADDR_LOOPBACK, 8080);
 
-    const char *query_list[4] = {   "this is client",
-                                    "sending a request",
-                                    "please accept the request",
-                                    "good bye"
-                                };
+    std::vector<std::string> cmd;
 
-    for(size_t i=0;i<4;++i){
-        int32_t err =  send_req(client_fd, query_list[i]);
-        if(err)
-            goto L_DONE;
+    for(int i = 1; i < argc; ++i){
+        cmd.push_back(argv[i]);
     }
 
-    for(size_t i = 0;i<4;++i){
-        int32_t err = read_res(client_fd);
-        if(err)
-            goto L_DONE;
-    }
+    int32_t err =  send_req(client_fd, cmd);
+    if(err)
+        goto L_DONE;
+    err = read_res(client_fd);
+    if(err)
+        goto L_DONE;
 
 L_DONE:    
     close(client_fd);
